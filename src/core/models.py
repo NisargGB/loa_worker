@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .enums import (ActionType, CaseStatus, CaseType, MessageCategory,
-                    ProcessingStatus, SourceType)
+from core.enums import (ActionType, CaseStatus, CaseType, MessageCategory,
+                        ProcessingStatus, SourceType)
 
 # Message Content Models
 

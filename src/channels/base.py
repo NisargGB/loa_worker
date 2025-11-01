@@ -3,7 +3,8 @@ Base channel abstraction for message ingestion.
 """
 from abc import ABC, abstractmethod
 from typing import AsyncIterator, Optional
-from ..core.models import Message
+
+from core.models import Message
 
 
 class BaseChannel(ABC):

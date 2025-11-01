@@ -275,7 +275,7 @@ async def _test_classify(message_text: str):
     """Test classification on a message."""
     from datetime import datetime
 
-    from ..core.models import EmailContent, Message
+    from core.models import EmailContent, Message
 
     console.print(f"\n[bold cyan]Testing Classification[/bold cyan]")
     console.print(f"Message: {message_text}\n")
@@ -288,7 +288,7 @@ async def _test_classify(message_text: str):
         content=EmailContent(
             from_address="test@example.com",
             to_address="test@example.com",
-            subject="Test",
+            subject="[No Subject]",
             body=message_text,
         ),
     )

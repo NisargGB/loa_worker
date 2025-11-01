@@ -2,8 +2,9 @@
 Pre-filter for fast rejection of irrelevant messages before LLM calls.
 """
 import re
-from typing import Set, List
-from ..core.models import Message
+from typing import List, Set
+
+from core.models import Message
 
 
 class PreFilter:

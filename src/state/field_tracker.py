@@ -1,9 +1,10 @@
 """
 Field completion tracking for LoA cases.
 """
-from typing import List, Dict, Set
 from datetime import datetime
-from ..core.models import Case, FieldValue
+from typing import Dict, List, Set
+
+from core.models import Case, FieldValue
 
 
 class FieldTracker:

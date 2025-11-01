@@ -11,10 +11,10 @@ from abc import ABC
 from textwrap import dedent
 from typing import Any, Dict, Optional
 
-from ..core.enums import ActionType, CaseType, LLMName, MessageCategory
-from ..core.models import (Action, Case, Classification, ExtractedEntities,
-                           Message)
-from ..llm.llm_client import LLMClient
+from core.enums import ActionType, CaseType, LLMName, MessageCategory
+from core.models import (Action, Case, Classification, ExtractedEntities,
+                         Message)
+from llm.llm_client import LLMClient
 
 
 class LLMService(ABC):
@@ -43,15 +43,21 @@ class LLMService(ABC):
         system_message = dedent("""
             You classify inbound communications for a case processing system handling Letters of Authority (LoA) and related admin.
             Return only strict JSON following this schema and constraints:
-            {
-              "category": one of ["CLIENT_TASK","LOA_CHASE","LOA_MISSING_INFO","LOA_RESPONSE","ADMIN","IRRELEVANT"],
+            {{
+              "category": one of {category_values},
               "confidence": number between 0 and 1 inclusive,
               "reasoning": short string (<= 200 chars),
               "is_relevant": boolean (false when category is IRRELEVANT or ADMIN)
-            }
+            }}
             Do not include code fences, preambles, or extra text. Ensure keys are exactly as specified.
+
+            More information about the categories:
+            {category_descriptions}
             """
-        ).strip()
+        ).strip().format(
+            category_values='[' + ', '.join([f'"{value}"' for value in MessageCategory.get_all_values()]) + ']',
+            category_descriptions='\n'.join([f"- {e.value}: {e.get_description()}" for e in MessageCategory.get_all_enums()])
+        )
 
         user_prompt = dedent("""
             Classify the following message. Consider LoA workflows, provider responses, missing information requests, and general admin.
@@ -62,8 +68,8 @@ class LLMService(ABC):
             ---
 
             Output strict JSON as specified.
-            """.format(text=text)
-        ).strip()
+            """
+        ).strip().format(text=text)
 
         messages = [
             {"role": "user", "content": user_prompt},
@@ -121,14 +127,14 @@ class LLMService(ABC):
         system_message = dedent("""
             You extract structured entities for case processing in the LoA domain.
             Return only strict JSON following this schema:
-            {
+            {{
               "client_name": string|null,
               "case_title": string|null,
               "field_updates": {"<field_name>": "<value>"},
               "missing_fields": [string],
               "confidence": number between 0 and 1,
               "additional_context": {"notes": string}
-            }
+            }}
             Field naming rules:
               - Use lower_snake_case for keys in field_updates
               - Canonical keys when applicable: date_of_birth, national_insurance_number, plan_number, provider_name, address
@@ -146,8 +152,8 @@ class LLMService(ABC):
             ---
 
             Output strict JSON as specified.
-            """.format(classification_category=classification.category.value, classification_description=classification.category.get_description(), text=text)
-        ).strip()
+            """
+        ).strip().format(classification_category=classification.category.value, classification_description=classification.category.get_description(), text=text)
 
         messages = [
             {"role": "user", "content": user_prompt},
@@ -314,7 +320,7 @@ class LLMService(ABC):
         system_message = dedent("""
             You draft clear, professional, concise emails to financial providers.
             Return plain text only, no greetings beyond the email body, no signatures unless asked.
-            Keep tone polite and direct. UK English. 120–200 words. Include list formatting for missing fields.
+            Keep tone polite and direct. UK English. 120-200 words. Include list formatting for missing fields.
             """
         ).strip()
 
@@ -331,8 +337,8 @@ class LLMService(ABC):
             - Reference the case succinctly
             - Thank the recipient and request a response
             - Return plain text only
-            """.format(client_name=case.client_name, case_title=case.case_title, fields_list=fields_list)
-        ).strip()
+            """
+        ).strip().format(client_name=case.client_name, case_title=case.case_title, fields_list=fields_list)
 
         messages = [
             {"role": "user", "content": user_prompt},
@@ -506,7 +512,7 @@ class LLMService(ABC):
 
 
 def get_llm_service() -> LLMService:
-    from .mock_service import MockLLMService
+    from llm.mock_service import MockLLMService
     if os.getenv("MOCK_LLM_SERVICE") in ["true", "1", "yes", "y"]:
         return MockLLMService()
     return LLMService()

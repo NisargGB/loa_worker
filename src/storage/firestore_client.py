@@ -10,7 +10,7 @@ from typing import Optional
 from google.cloud import firestore
 from google.cloud.firestore import AsyncClient
 
-from ..core.exceptions import ConfigurationError
+from core.exceptions import ConfigurationError
 
 
 class FirestoreClient:

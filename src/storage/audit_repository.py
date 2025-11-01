@@ -2,11 +2,13 @@
 Repository for audit logging in Firestore.
 """
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
+
 from google.cloud.firestore import FieldFilter
-from ..core.models import AuditLog
-from ..core.enums import ActionType
-from ..core.exceptions import StorageError
+
+from core.enums import ActionType
+from core.exceptions import StorageError
+from core.models import AuditLog
 
 if TYPE_CHECKING:
     from google.cloud.firestore import AsyncClient

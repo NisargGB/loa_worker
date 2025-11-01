@@ -2,9 +2,11 @@
 Mock LLM service for testing and development.
 """
 from typing import Optional
-from .service import LLMService
-from ..core.models import Message, Classification, ExtractedEntities, Action, Case
-from ..core.enums import MessageCategory, ActionType
+
+from core.enums import ActionType, MessageCategory
+from core.models import (Action, Case, Classification, ExtractedEntities,
+                         Message)
+from llm.service import LLMService
 
 
 class MockLLMService(LLMService):

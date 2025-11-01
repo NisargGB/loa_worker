@@ -4,18 +4,13 @@ Dummy channel that reads from JSON dataset for testing.
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncIterator, Optional, List, Dict, Any
-from .base import BaseChannel
-from ..core.models import (
-    Message,
-    EmailContent,
-    TeamsContent,
-    TranscriptContent,
-    DocumentContent,
-    TeamsChatMessage,
-    TranscriptTurn,
-)
-from ..core.enums import SourceType, ProcessingStatus
+from typing import Any, AsyncIterator, Dict, List, Optional
+
+from channels.base import BaseChannel
+from core.enums import ProcessingStatus, SourceType
+from core.models import (DocumentContent, EmailContent, Message,
+                         TeamsChatMessage, TeamsContent, TranscriptContent,
+                         TranscriptTurn)
 
 
 class DummyChannel(BaseChannel):

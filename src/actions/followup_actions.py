@@ -3,11 +3,12 @@ Action handlers for follow-up actions.
 """
 from datetime import datetime
 from typing import Optional
-from .base import ActionHandler
-from ..core.models import Action
-from ..core.enums import ActionType
-from ..core.exceptions import ActionExecutionError
-from ..llm.service import LLMService
+
+from actions.base import ActionHandler
+from core.enums import ActionType
+from core.exceptions import ActionExecutionError
+from core.models import Action
+from llm.service import LLMService
 
 
 class FollowupActionHandler(ActionHandler):

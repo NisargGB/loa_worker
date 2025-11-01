@@ -4,7 +4,17 @@ Enums for the LoA Worker system.
 from enum import Enum
 
 
-class SourceType(str, Enum):
+class BaseEnum(str, Enum):
+    @classmethod
+    def get_all_enums(cls) -> list['BaseEnum']:
+        return [enum for enum in cls]
+
+    @classmethod
+    def get_all_values(cls) -> list[str]:
+        return [value.value for value in cls]
+
+
+class SourceType(BaseEnum):
     """Message source types."""
     EMAIL = "email"
     TEAMS = "teams"
@@ -13,7 +23,7 @@ class SourceType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class MessageCategory(str, Enum):
+class MessageCategory(BaseEnum):
     """Classification categories for messages."""
     CLIENT_TASK = "CLIENT_TASK"
     LOA_CHASE = "LOA_CHASE"
@@ -51,7 +61,7 @@ class MessageCategory(str, Enum):
         }
         return descriptions.get(self, "Uncategorized message type.")
 
-class ActionType(str, Enum):
+class ActionType(BaseEnum):
     """Types of actions that can be triggered."""
     CREATE_CASE = "CREATE_CASE"
     UPDATE_CASE = "UPDATE_CASE"
@@ -64,14 +74,14 @@ class ActionType(str, Enum):
     IGNORE = "IGNORE"
 
 
-class CaseType(str, Enum):
+class CaseType(BaseEnum):
     """Types of cases."""
     LOA = "loa"
     GENERAL = "general"
     ANNUAL_REVIEW = "annual_review"
 
 
-class CaseStatus(str, Enum):
+class CaseStatus(BaseEnum):
     """Case status in the state machine."""
     OPEN = "OPEN"
     IN_PROGRESS = "IN_PROGRESS"
@@ -80,7 +90,7 @@ class CaseStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
-class ProcessingStatus(str, Enum):
+class ProcessingStatus(BaseEnum):
     """Status of message processing."""
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
@@ -89,6 +99,6 @@ class ProcessingStatus(str, Enum):
     SKIPPED = "SKIPPED"
 
 
-class LLMName(str, Enum):
+class LLMName(BaseEnum):
     """Names of LLMs."""
     GEMINI_2_5_FLASH = "gemini-2.5-flash"

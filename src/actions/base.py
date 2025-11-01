@@ -3,9 +3,10 @@ Base action handler interface.
 """
 from abc import ABC, abstractmethod
 from typing import Optional
-from ..core.models import Action, AuditLog
-from ..storage.case_repository import CaseRepository
-from ..storage.audit_repository import AuditRepository
+
+from core.models import Action, AuditLog
+from storage.audit_repository import AuditRepository
+from storage.case_repository import CaseRepository
 
 
 class ActionHandler(ABC):

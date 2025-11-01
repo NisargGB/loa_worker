@@ -1,10 +1,11 @@
 """
 Case state machine for managing state transitions.
 """
-from typing import Dict, Set, Optional
-from ..core.models import Case
-from ..core.enums import CaseStatus, CaseType
-from ..core.exceptions import InvalidStateTransitionError
+from typing import Dict, Optional, Set
+
+from core.enums import CaseStatus, CaseType
+from core.exceptions import InvalidStateTransitionError
+from core.models import Case
 
 
 class CaseStateMachine:
