@@ -1,6 +1,6 @@
 # LoA Worker
 
-An intelligent agent system for automating the processing of Letters of Authority (LoA) responses from financial providers. This single README consolidates all design, implementation, and usage documentation.
+An intelligent agent system for automating the processing of Letters of Authority (LoA) responses from financial providers. This README reflects the current, working implementation across the Python backend and the Next.js dashboard.
 
 ## Overview
 
@@ -12,7 +12,7 @@ LoA Worker processes inbound communications (emails, Teams messages, transcripts
 - Trigger automated actions (follow-ups, case updates, completions)
 - Maintain a full audit trail of all operations
 
-The system follows a modular, testable pipeline with clean separations between channels, LLMs, state, actions, and storage.
+It follows a modular, testable pipeline with clean separations between channels, LLMs, state, actions, and storage. A basic dashboard (Next.js) provides read-only views of cases and audit logs from Firestore.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Match Case → Determine Action (LLM) → Execute → Audit
 ├─────────────────────────────────────────┤
 │  Actions │ State │ LLM │ Channels      │
 ├─────────────────────────────────────────┤
-│    Storage Layer (Firestore/Mock)       │
+│      Storage Layer (Firestore)          │
 ├─────────────────────────────────────────┤
 │          Core Models & Types            │
 └─────────────────────────────────────────┘
@@ -46,51 +46,56 @@ Match Case → Determine Action (LLM) → Execute → Audit
 - Purpose: Abstract different sources (email, Teams, transcripts, documents) behind a unified interface.
 - Components:
   - `BaseChannel` (ABC)
-  - `DummyChannel` (JSON dataset for testing)
+  - `DummyChannel` (reads JSON dataset for testing)
   - Future: `EmailChannel`, `TeamsChannel`, `TranscriptChannel`, `DocumentChannel`
 - Pattern: Strategy pattern for pluggable sources
 
 #### 2) Processing Pipeline
 
-- Purpose: Transform raw messages into actionable insights using LLM-powered analysis.
-- Flow: Raw Message → Normalize → Classify → Extract Entities → Route Action → Execute
-- Components:
-  - `MessageNormalizer`
-  - `MessageClassifier` [LLM]
-  - `EntityExtractor` [LLM]
-  - `IntentDetector` [LLM]
-  - `PipelineOrchestrator`
+- Purpose: Transform raw messages into actionable insights.
+- Steps (as implemented in `PipelineOrchestrator`):
+  1. Pre-filter (fast rejection of spam/marketing)
+  2. Classify message (LLM)
+  3. Extract entities (LLM)
+  4. Match/find existing case
+  5. Determine action (LLM)
+  6. Execute action (case/task/follow-up)
+  7. Log and audit
 - Pattern: Pipeline with dependency injection for LLM services
 
 #### 3) LLM Integration Layer
 
-- Purpose: Provide clean abstraction for LLM calls with mockability for testing.
+- Purpose: Provide clean abstraction for LLM calls with a mock for testing.
 - Components:
-  - `LLMService` (ABC)
-  - Prompt templates (Jinja2)
-  - Response parsing (structured JSON → Pydantic)
-  - `MockLLMService` (for testing)
+  - `LLMService` with default implementations
+  - `MockLLMService` (uses dataset expectations; no API calls)
+  - `LLMClient` (Google `genai` client for Gemini models)
 - Key methods:
   - `classify_message(message) -> Classification`
-  - `extract_entities(message) -> ExtractedEntities`
-  - `determine_action(message, context) -> Action`
-- Design principle: All LLM calls return structured data (Pydantic), never raw strings
+  - `extract_entities(message, classification) -> ExtractedEntities`
+  - `determine_action(message, classification, entities, existing_case) -> Action`
+  - `generate_followup_email(case, missing_fields) -> str`
+  - `health_check() -> bool`
+- Provider: Gemini 2.5 Flash via `google-genai`. To run locally without LLM credentials, set `MOCK_LLM_SERVICE=true`.
 
 #### 4) State Management
 
 - Purpose: Track case progress, field completion, and state transitions.
 - Components:
-  - `CaseRepository` (Firestore CRUD)
+  - `CaseRepository` (Firestore CRUD; async client)
+  - `AuditRepository` (immutable audit trail)
   - `CaseStateMachine` (OPEN → IN_PROGRESS → AWAITING_INFO ⟷ IN_PROGRESS → COMPLETE; ↘ CANCELLED)
   - `FieldTracker` (required vs received fields for LoA cases)
-  - `AuditRepository` (immutable log of changes)
-- Firestore collections: `cases/`, `case_fields/` (sub-collection), `audit_logs/`, `messages/`
+- Firestore collections (as used today):
+  - `cases/`
+  - `cases/{caseId}/tasks/` (sub-collection)
+  - `tasks/` (for standalone tasks)
+  - `audit_logs/`
 
 #### 5) Action Engine
 
 - Purpose: Execute actions based on pipeline decisions.
 - Components:
-  - `ActionHandler` (ABC)
   - `CaseActionHandler` (CREATE/UPDATE/COMPLETE/CANCEL)
   - `TaskActionHandler` (CREATE/COMPLETE)
   - `FollowupActionHandler` (DRAFT_FOLLOWUP_EMAIL/INITIATE_LOA_CHASE)
@@ -110,91 +115,87 @@ class Action: ...
 class AuditLog: ...
 ```
 
-### Non-Functional Design Decisions
+### Non-Functional Design Notes
 
 - Reliability:
-  - Idempotent actions
-  - Firestore transactions for atomic updates
-  - Error handling tiers (retryable, parsing, critical)
+  - Action handlers aim to be idempotent where practical
+  - Typed models and validation
+  - Clear error paths (processing failure recorded)
 - Auditability:
-  - Immutable audit log
-  - Message traceability
-  - LLM decision logging; microsecond timestamps
+  - Immutable audit log entries with before/after state
+  - LLM decision context captured via structured models
 - Scalability:
-  - Pre-filtering, async I/O, batch processing
-  - Caching (context, provider templates)
-  - Stateless horizontal scaling
+  - Pre-filtering to reduce LLM calls
+  - Batch processing (currently sequential)
 - Maintainability:
-  - Plugin architecture, strict typing, DI
-  - Config-driven (no hardcoded values)
-  - Unit/integration/E2E tests; docstrings
+  - Plugin-style architecture, strict typing, DI
+  - Separation of concerns across modules
 - Cost Awareness:
-  - Smart pre-filtering and prompt optimization
-  - Model selection and response caching
-  - Monitoring of token usage
+  - Pre-filtering and prompt scoping
+  - Optional mock LLM for development/testing
 
 ## Project Structure
 
 ```
 loa_worker/
 ├── src/
-│   ├── core/           # Data models, enums, exceptions
-│   ├── channels/       # Message ingestion channels
-│   ├── pipeline/       # Processing pipeline
-│   ├── llm/            # LLM service abstraction
-│   ├── storage/        # Firestore repositories
-│   ├── actions/        # Action handlers
-│   ├── state/          # State machine and field tracking
-│   └── cli/            # Command-line interface
-├── tests/              # Test suite
+│   ├── core/            # Data models, enums, exceptions
+│   ├── channels/        # Message ingestion channels
+│   ├── pipeline/        # Processing pipeline
+│   ├── llm/             # LLM service abstraction and client
+│   ├── storage/         # Firestore repositories and client wrapper
+│   ├── actions/         # Action handlers and router
+│   ├── state/           # State machine and field tracking
+│   └── cli/             # Command-line interface
+├── dashboard/            # Next.js dashboard (read-only UI)
+├── tests/                # Test suite
 ├── scenario_full_workflows.json  # Sample dataset
 └── README.md
 ```
 
-## Implementation Summary (Phase 1 Complete)
+## Implementation Summary
 
 ### Core Data Layer (`src/core/`)
 
-- 11 Pydantic models (Message, Case, Task, FieldValue, Classification, ExtractedEntities, Action, AuditLog, ProcessingResult, BatchProcessingResult)
-- 6 enums (SourceType, MessageCategory, ActionType, CaseType, CaseStatus, ProcessingStatus)
+- Pydantic models: Message, Case, Task, FieldValue, Classification, ExtractedEntities, Action, AuditLog, ProcessingResult, BatchProcessingResult
+- Enums: SourceType, MessageCategory, ActionType, CaseType, CaseStatus, ProcessingStatus, LLMName
 - Custom exception hierarchy
-- Full type hints and validation; useful model helpers
 
-### Channel Abstraction (`src/channels/`)
+### Channels (`src/channels/`)
 
 - `BaseChannel` (ABC) with async context manager support
-- `DummyChannel` reads JSON dataset
+- `DummyChannel` reads the bundled JSON dataset
 
 ### LLM Integration (`src/llm/`)
 
-- `LLMService` (ABC) with 5 core methods: classify, extract, determine action, generate follow-up email, health check
-- `MockLLMService` that uses expected metadata for end-to-end testing (no API calls)
+- `LLMService` with default implementations calling Gemini (via `google-genai`)
+- `MockLLMService` for deterministic testing using dataset expectations
+- `MOCK_LLM_SERVICE=true` forces mock behavior
 
-### Storage Layer (`src/storage/`)
+### Storage (`src/storage/`)
 
-- Firestore async client wrapper
-- `CaseRepository` with rich case/task CRUD (transactions supported)
+- Firestore async client wrapper (`FirestoreClient`)
+- `CaseRepository` with case/task CRUD
 - `AuditRepository` for immutable logs
-- Mock repositories (in-memory) with identical interface
 
-### State Management (`src/state/`)
+### State (`src/state/`)
 
-- `CaseStateMachine` enforces valid transitions, auto-transition logic, terminal detection
-- `FieldTracker` tracks completion and progress, surfaces low-confidence fields
+- `CaseStateMachine` enforces valid transitions and auto-transitions for LoA
+- `FieldTracker` tracks completion and surface low-confidence fields
 
-### Action Handlers (`src/actions/`)
+### Actions (`src/actions/`)
 
-- 8 action types across case, task, and follow-up; router dispatches; full audit logging with rollback
+- Case, Task, and Follow-up handlers; `ActionRouter` dispatches; audit logging on all
 
 ### Pipeline (`src/pipeline/`)
 
-- PreFilter (keyword heuristics, domain lists)
-- PipelineOrchestrator (7-step flow, async, batch, validation, error recovery)
+- `PreFilter` (keyword/domain heuristics)
+- `PipelineOrchestrator` (7-step flow, async, batch, validation)
 
 ### CLI (`src/cli/`)
 
 - Commands: `process`, `cases`, `classify`, `stats`
-- Rich output with tables/progress; validation mode; flexible filtering
+- Rich output using `rich`
 
 ## Key Algorithms
 
@@ -209,17 +210,13 @@ def is_case_complete(case: Case) -> bool:
     return required.issubset(received)
 ```
 
-### Smart Message Routing (Pre-Filter)
+### Smart Message Pre-Filter (Heuristics)
 
 ```python
 def should_process_message(message: Message) -> bool:
-    if is_blacklisted_sender(message.sender):
-        return False
-    if is_whitelisted_sender(message.sender):
-        return True
-    loa_keywords = ['loa', 'letter of authority', 'policy', 'plan number']
-    text = get_message_text(message).lower()
-    return any(kw in text for kw in loa_keywords)
+    # domain allow/deny + keyword scoring
+    # default to True if uncertain (let LLM decide)
+    ...
 ```
 
 ## Installation
@@ -227,9 +224,10 @@ def should_process_message(message: Message) -> bool:
 ### Prerequisites
 
 - Python 3.10+
-- Google Cloud Firestore enabled (recommended for persistence)
+- Node.js 18+ (for dashboard)
+- Google Cloud Firestore with a service account JSON
 
-### Setup
+### Backend Setup (Python)
 
 1) Clone and enter the repo
 
@@ -250,63 +248,66 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4) Configure environment (Firestore)
+4) Configure environment variables (required)
 
 ```bash
-cp .env.example .env
-# Edit .env with your Firestore credentials
+export FIRESTORE_PROJECT_ID=your-project-id
+export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+export MOCK_LLM_SERVICE=true  # recommended for local/dev to avoid real LLM calls
 ```
 
-5) Install package in development mode
+### Dashboard Setup (Next.js)
+
+1) Install dependencies
 
 ```bash
-pip install -e .
+cd dashboard
+npm install
 ```
 
-## Configuration
-
-Environment variables:
-
-- `FIRESTORE_PROJECT_ID`: GCP project for Firestore
-- `GOOGLE_APPLICATION_CREDENTIALS`: Path to service account key JSON
-- `LOG_LEVEL`: Logging verbosity
-- `ENABLE_PRE_FILTER`: Enable/disable fast pre-filtering
-- `MAX_CONCURRENT_MESSAGES`: Parallel processing limit
-
-Firestore shell setup example:
+2) Configure environment variables (server-side)
 
 ```bash
-export FIRESTORE_PROJECT_ID=your-project
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+export FIRESTORE_PROJECT_ID=your-project-id
+export GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
 ```
+
+3) Run the dev server
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000` to view the dashboard.
 
 ## Usage (CLI)
+
+Run the CLI via module invocation (no package install required):
 
 ### Process Messages
 
 ```bash
-# Process the full sample dataset
-loa-worker process --file scenario_full_workflows.json
+# Process the full sample dataset (requires Firestore env vars)
+python -m src.cli.main process --file scenario_full_workflows.json
 
 # Process a specific day
-loa-worker process --file scenario_full_workflows.json --day 1
+python -m src.cli.main process --file scenario_full_workflows.json --day 1
 
 # Validate outputs against expected results
-loa-worker process --file scenario_full_workflows.json --validate
+python -m src.cli.main process --file scenario_full_workflows.json --validate
 ```
 
-### Test Classification/Extraction
+### Test Classification
 
 ```bash
-loa-worker classify "Please open an LOA case for Alice Brown. Capture DOB, NI number, Plan number."
+python -m src.cli.main classify "Please open an LoA case for Alice Brown. Capture DOB and plan number."
 ```
 
-### Cases and Audit
+### List Cases / Stats
 
 ```bash
-loa-worker cases           # list cases
-loa-worker cases --status OPEN --type loa --limit 10
-loa-worker audit --case <case_id>
+python -m src.cli.main cases --status OPEN --type loa --limit 10
+python -m src.cli.main stats
 ```
 
 ## Sample Dataset
@@ -316,47 +317,33 @@ loa-worker audit --case <case_id>
 - Day 1: Alice Brown LoA workflow (creation, missing info, responses, updates, completion)
 - Days 2–3: Ben Carter annual review (tasks, completions, progress tracking)
 
-The dataset includes expected values for validation testing.
+The dataset includes expected values for validation testing used by `MockLLMService`.
 
 ## LLM Integration
 
-The system uses an abstract `LLMService` to support multiple providers.
-
-- Primary operations:
-  - `classify_message()` – determine relevance and category
-  - `extract_entities()` – structured data extraction
-  - `determine_action()` – select next action
-- Current: `MockLLMService` enables full testing without API calls
-- Real provider integration: implement `LLMService`, provide prompts, and wire API keys
-
-Example (sketch):
-
-```python
-class AnthropicLLMService(LLMService):
-    async def classify_message(self, message: Message):
-        response = await self.client.messages.create(...)
-        return parse_classification(response)
-```
+- Abstract service: `LLMService`
+- Default provider: Gemini 2.5 Flash via `google-genai`
+- Local/dev: `MOCK_LLM_SERVICE=true` uses `MockLLMService` (no external calls)
 
 ## Performance Characteristics (Estimates)
 
-- Pre-filter: <1ms/message; filters 80%+ spam
+- Pre-filter: <1ms/message; filters 80%+ spam/marketing
 - LLM operations: ~1–2s per relevant message total
 - Firestore: writes 50–200ms; reads 20–100ms
-- Batch processing: sequential 1–2s/msg; parallel (10 workers) ~200–300ms/msg
+- Batch processing: sequential (1–2s/msg). Future work: parallel processing
 
 ## Cost Considerations (Estimates)
 
 Assuming 100 messages/day, 80% filtered, 20 messages hit LLM, ~2k tokens/message:
 
-- Claude Sonnet: ~$0.12/day, ~$3.60/month
-- Optimizations: pre-filtering, caching, cheaper models for classification
+- Cost depends on provider/model; pre-filtering reduces spend
+- Use the mock service for development/testing to avoid costs
 
 ## Security Considerations
 
-- Data protection: Firestore encryption at rest; no PII in logs
-- Access control: service account, API keys via env, row-level security
-- Error handling: sensitive data not exposed; retry with backoff
+- Data protection: Firestore encryption at rest; avoid PII in logs
+- Access control: Service account JSON via env; least-privileged accounts
+- Dashboard uses Firebase Admin SDK (server-side only)
 
 ## Case State Machine
 
@@ -369,20 +356,19 @@ LoA cases auto-transition to COMPLETE when all required fields are received.
 
 ## Known Limitations
 
-- Batch-only (no real-time yet)
-- Single-tenant
-- No UI (Next.js dashboard planned)
-- Limited provider knowledge (no template learning yet)
-- Sequential processing (parallelization planned)
+- Batch-only (no real-time ingestion yet)
+- Sequential processing (no concurrency yet)
+- Single-tenant; no auth on dashboard
+- Firestore required (no in-memory repository currently)
+- LLM defaults to Gemini unless `MOCK_LLM_SERVICE=true`
 
 ## Roadmap
 
 ### Phase 2: LLM Integration
 
-- Implement real provider service
-- Prompt templates and confidence thresholds
-- Human review queue for low confidence
-- Token usage tracking
+- Confidence thresholds and prompt tuning
+- Human review queue for low-confidence extractions
+- Token usage tracking/metrics
 
 ### Phase 3: Production Channels
 
@@ -392,8 +378,8 @@ LoA cases auto-transition to COMPLETE when all required fields are received.
 ### Phase 4: Advanced Features
 
 - Template learning and provider knowledge base
-- Next.js dashboard and advanced analytics
-- Multi-tenancy and production monitoring
+- Dashboard enhancements and analytics; auth/multi-tenancy
+- Production monitoring and alerting
 
 ## How to Extend
 
@@ -403,23 +389,22 @@ LoA cases auto-transition to COMPLETE when all required fields are received.
 2) Inherit `BaseChannel`; implement `fetch_messages()`
 3) Parse into `Message` with appropriate content type
 
-### Add Real LLM Integration
+### Add a New LLM Provider
 
-1) Create `src/llm/<provider>_service.py`
-2) Implement `LLMService` methods
-3) Add templates in `src/config/prompts.yaml`
-4) Configure API keys in `.env`
+1) Extend `LLMService` in `src/llm/`
+2) Implement: `classify_message`, `extract_entities`, `determine_action`, `generate_followup_email`
+3) Wire provider selection in `get_llm_service()`
 
 ### Add a New Action Type
 
 1) Add enum to `ActionType`
-2) Implement handler and wire in `router.py`
+2) Implement handler and wire in `actions/router.py`
 3) Include audit logging
 
 ## Testing Strategy
 
 - Unit: isolated components with mocks
-- Integration: component interactions with mock repos
+- Integration: component interactions with Firestore (or via mocks where added)
 - E2E: full workflows via `DummyChannel`
 
 Example tests: `tests/unit/test_case_state.py`, `tests/unit/test_models.py`
@@ -460,4 +445,4 @@ For issues and questions:
 
 ---
 
-Built with: Python, Pydantic, Firestore, Click, Rich
+Built with: Python, Pydantic, Firestore, Click, Rich, Next.js
