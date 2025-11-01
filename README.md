@@ -283,31 +283,32 @@ Open `http://localhost:3000` to view the dashboard.
 ## Usage (CLI)
 
 Run the CLI via module invocation (no package install required):
+Run `cd src` first
 
 ### Process Messages
 
 ```bash
 # Process the full sample dataset (requires Firestore env vars)
-python -m src.cli.main process --file scenario_full_workflows.json
+python -m cli.main process --file scenario_full_workflows.json
 
 # Process a specific day
-python -m src.cli.main process --file scenario_full_workflows.json --day 1
+python -m cli.main process --file scenario_full_workflows.json --day 1
 
 # Validate outputs against expected results
-python -m src.cli.main process --file scenario_full_workflows.json --validate
+python -m cli.main process --file scenario_full_workflows.json --validate
 ```
 
 ### Test Classification
 
 ```bash
-python -m src.cli.main classify "Please open an LoA case for Alice Brown. Capture DOB and plan number."
+python -m cli.main classify "Please open an LoA case for Alice Brown. Capture DOB and plan number."
 ```
 
 ### List Cases / Stats
 
 ```bash
-python -m src.cli.main cases --status OPEN --type loa --limit 10
-python -m src.cli.main stats
+python -m cli.main cases --status OPEN --type loa --limit 10
+python -m cli.main stats
 ```
 
 ## Sample Dataset
