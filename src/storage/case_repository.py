@@ -132,23 +132,24 @@ class CaseRepository:
         except Exception as e:
             raise StorageError(f"Failed to delete case: {e}")
 
-    async def find_case_by_client_and_title(
+    async def find_cases_by_client(
         self,
         client_name: str,
         case_title: Optional[str] = None,
-    ) -> Optional[Case]:
+        strict_name_match: bool = True,
+    ) -> List[Case]:
         """
         Find a case by client name and optionally case title.
 
         Args:
             client_name: Client name
             case_title: Optional case title for more specific matching
-
-        Returns:
-            Case if found, None otherwise
         """
         try:
-            query = self.collection.where(filter=FieldFilter("client_name", "==", client_name))
+            if strict_name_match:
+                query = self.collection.where(filter=FieldFilter("client_name", "==", client_name))
+            else:
+                query = self.collection.where(filter=FieldFilter("client_name", ">=", client_name)).where(filter=FieldFilter("client_name", "<=", client_name + "\uf8ff"))
 
             if case_title:
                 query = query.where(filter=FieldFilter("case_title", "==", case_title))
@@ -160,15 +161,16 @@ class CaseRepository:
                 CaseStatus.AWAITING_INFO.value,
             ]))
 
-            docs = query.limit(1).stream()
+            docs = query.stream()
 
+            cases = []
             async for doc in docs:
-                return Case(**doc.to_dict())
+                cases.append(Case(**doc.to_dict()))
 
-            return None
+            return cases
 
         except Exception as e:
-            raise StorageError(f"Failed to find case: {e}")
+            raise StorageError(f"Failed to find cases: {e}")
 
     async def list_cases(
         self,

@@ -9,9 +9,10 @@ import os
 import re
 from abc import ABC
 from textwrap import dedent
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from core.enums import ActionType, CaseType, LLMName, MessageCategory
+from core.enums import (ActionType, CaseStatus, CaseType, LLMName,
+                        MessageCategory)
 from core.models import (Action, Case, Classification, ExtractedEntities,
                          Message)
 from llm.llm_client import LLMClient
@@ -198,6 +199,15 @@ class LLMService(ABC):
             confidence=confidence,
             additional_context=additional_context,
         )
+
+    async def infer_case(self, candidate_cases: List[Case]) -> Optional[Case]:
+        """
+        Infer the case from the candidate case IDs.
+        """
+        pass  # TODO: Future implementation - Given the current message, source channel info and possible matching cases, infer the most likely case using an LLM
+        # For now, pick the latest one
+        cases = sorted(candidate_cases, key=lambda c: c.updated_at, reverse=True)
+        return cases[0] if cases else None
 
     async def determine_action(
         self,

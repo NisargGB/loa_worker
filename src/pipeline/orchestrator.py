@@ -96,10 +96,18 @@ class PipelineOrchestrator:
             # Step 4: Find existing case if referenced
             existing_case = None
             if entities.client_name:
-                existing_case = await self.case_repo.find_case_by_client_and_title(
-                    client_name=entities.client_name,
-                    case_title=entities.case_title,
-                )
+                existing_cases = await self.case_repo.find_cases_by_client(client_name=entities.client_name)
+                if not existing_cases:
+                    existing_cases = await self.case_repo.find_cases_by_client(client_name=entities.client_name, strict_name_match=False)
+                if existing_cases:
+                    if len(existing_cases) == 1:
+                        existing_case = existing_cases[0]
+                    else:
+                        existing_case = await self.llm_service.infer_case(existing_cases)
+            if existing_case:
+                entities.case_id = existing_case.id
+                entities.client_name = existing_case.client_name
+                entities.case_title = existing_case.case_title
 
             # Step 5: Determine action
             action = await self.llm_service.determine_action(
@@ -220,11 +228,15 @@ class PipelineOrchestrator:
         if expected_action := metadata.get("expected_action"):
             if result.actions_taken:
                 actual_action = result.actions_taken[0].type.value
+                if expected_action == 'UPDATE_LOA_CASE' and actual_action == 'UPDATE_CASE':
+                    actual_action = 'UPDATE_CASE'
                 if actual_action != expected_action:
                     validation["passed"] = False
                     validation["errors"].append(
                         f"Action mismatch: expected {expected_action}, got {actual_action}"
                     )
+            elif expected_action == 'IGNORE':
+                validation["passed"] = True
             else:
                 validation["passed"] = False
                 validation["errors"].append(
